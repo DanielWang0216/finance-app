@@ -350,7 +350,7 @@ export default function App() {
   const netPct=sum.totalOut>0?Math.abs((sum.net/sum.totalOut)*100).toFixed(1):"0.0";
   const totalFlow=(sum.totalIn+sum.totalOut)||1;
   const lastSyncStr=lastSync?new Date(lastSync).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"}):null;
-  const tt={background:"#070d1a",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,fontSize:12,color:"#e2e8f0"};
+  const tt={background:"rgba(10,15,26,.97)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,fontSize:13,color:"#e2e8f0",padding:"10px 16px",boxShadow:"0 8px 32px rgba(0,0,0,.6)"};
   const curCat=catMap[form.cat];
 
   const MNav=()=>(
@@ -618,11 +618,22 @@ export default function App() {
           <div className="gc">
             <div style={{fontSize:14,fontWeight:700,color:"#f1f5f9",marginBottom:14}}>類別結構</div>
             {pie.length===0?<div style={{textAlign:"center",color:"#1e3a5f",padding:"40px 0"}}>此期間無資料</div>:
-              <ResponsiveContainer width="100%" height={220}><PieChart>
-                <Pie data={pie} cx="50%" cy="50%" outerRadius={85} innerRadius={36} dataKey="val" paddingAngle={4} label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={11}>
+              <ResponsiveContainer width="100%" height={240}><PieChart>
+                <Pie data={pie} cx="50%" cy="50%" outerRadius={88} innerRadius={40} dataKey="val" paddingAngle={4}
+                  label={({name,percent,x,y,cx:cx2})=>(
+                    <text x={x} y={y} textAnchor={x>cx2?"start":"end"} dominantBaseline="central" fill="#94a3b8" fontSize={11} fontFamily="Noto Sans TC">
+                      {name} {(percent*100).toFixed(0)}%
+                    </text>
+                  )}
+                  labelLine={{stroke:"#334155",strokeWidth:1}}>
                   {pie.map((d,i)=><Cell key={i} fill={d.color}/>)}
                 </Pie>
-                <Tooltip formatter={v=>`${v.toLocaleString()} 元`} contentStyle={tt}/>
+                <Tooltip
+                  contentStyle={{background:"rgba(10,15,26,.95)",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,fontSize:13,color:"#e2e8f0",padding:"10px 16px"}}
+                  itemStyle={{color:"#e2e8f0"}}
+                  labelStyle={{color:"#64748b",marginBottom:4}}
+                  formatter={(v,name)=>[`${v.toLocaleString()} 元`, name]}
+                />
               </PieChart></ResponsiveContainer>
             }
           </div>
