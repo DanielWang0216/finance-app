@@ -201,30 +201,6 @@ export default function App() {
     const meta4 = document.createElement("meta"); meta4.name="theme-color"; meta4.content="#04060d"; document.head.appendChild(meta4);
   },[]);
 
-  const sum = useMemo(()=>{
-    let tin=0, tout=0;
-    const by={};
-    allKeys.forEach(k=>{ by[k]=0; });
-    fltRecs.forEach(r=>{
-      const a=Number(r.amt);
-      const cat=catMap[r.cat];
-      if(!(r.cat in by)) by[r.cat]=0;
-      if(!cat){
-        if(a>=0) tin+=a; else tout+=Math.abs(a);
-        by[r.cat]+=a; return;
-      }
-      if(cat.signed){
-        if(a>=0){ tin+=a; by[r.cat]+=a; }
-        else { tout+=Math.abs(a); by[r.cat]+=a; }
-      } else if(cat.sign===1){
-        tin+=a; by[r.cat]+=a;
-      } else {
-        tout+=Math.abs(a); by[r.cat]+=Math.abs(a);
-      }
-    });
-    return {...by, totalIn:Math.round(tin), totalOut:Math.round(tout), net:Math.round(tin-tout)};
-  },[fltRecs, catMap, allKeys]);
-
   // Login
   function doLogin() {
     const name=nameInput.trim();
@@ -261,6 +237,30 @@ export default function App() {
   const allYMs = useMemo(()=>{ const s=new Set(recs.map(r=>r.date.slice(0,7))); s.add(nowYM()); return [...s].sort().reverse(); },[recs]);
   const datFlt = useMemo(()=>{ if(rMode==="month")return recs.filter(r=>r.date.slice(0,7)===ym); return recs.filter(r=>r.date>=range.from&&r.date<=range.to); },[recs,rMode,ym,range]);
   const fltRecs= useMemo(()=> datFlt.filter(r=>checked.has(r.cat)),[datFlt,checked]);
+
+  const sum = useMemo(()=>{
+    let tin=0, tout=0;
+    const by={};
+    allKeys.forEach(k=>{ by[k]=0; });
+    fltRecs.forEach(r=>{
+      const a=Number(r.amt);
+      const cat=catMap[r.cat];
+      if(!(r.cat in by)) by[r.cat]=0;
+      if(!cat){
+        if(a>=0) tin+=a; else tout+=Math.abs(a);
+        by[r.cat]+=a; return;
+      }
+      if(cat.signed){
+        if(a>=0){ tin+=a; by[r.cat]+=a; }
+        else { tout+=Math.abs(a); by[r.cat]+=a; }
+      } else if(cat.sign===1){
+        tin+=a; by[r.cat]+=a;
+      } else {
+        tout+=Math.abs(a); by[r.cat]+=Math.abs(a);
+      }
+    });
+    return {...by, totalIn:Math.round(tin), totalOut:Math.round(tout), net:Math.round(tin-tout)};
+  },[fltRecs, catMap, allKeys]);
 
   const trend = useMemo(()=>[...allYMs].reverse().slice(-6).map(m=>{
     const r=recs.filter(x=>x.date.slice(0,7)===m&&checked.has(x.cat));
