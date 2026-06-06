@@ -187,6 +187,44 @@ export default function App() {
   const catMap = useMemo(()=> Object.fromEntries(cats.map(c=>[c.key,c])), [cats]);
   const allKeys = useMemo(()=> cats.map(c=>c.key), [cats]);
 
+  // PWA: inject manifest dynamically
+  useEffect(()=>{
+    if(document.getElementById("pwa-manifest")) return;
+    const manifest = { name:"財務記帳", short_name:"記帳", start_url:"/", display:"standalone", background_color:"#04060d", theme_color:"#04060d", icons:[{src:"https://fav.farm/💹",sizes:"192x192",type:"image/png"}] };
+    const blob = new Blob([JSON.stringify(manifest)],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("link"); link.id="pwa-manifest"; link.rel="manifest"; link.href=url;
+    document.head.appendChild(link);
+    const meta = document.createElement("meta"); meta.name="apple-mobile-web-app-capable"; meta.content="yes"; document.head.appendChild(meta);
+    const meta2 = document.createElement("meta"); meta2.name="apple-mobile-web-app-status-bar-style"; meta2.content="black-translucent"; document.head.appendChild(meta2);
+    const meta3 = document.createElement("meta"); meta3.name="apple-mobile-web-app-title"; meta3.content="財務記帳"; document.head.appendChild(meta3);
+    const meta4 = document.createElement("meta"); meta4.name="theme-color"; meta4.content="#04060d"; document.head.appendChild(meta4);
+  },[]);
+
+  const sum = useMemo(()=>{
+    let tin=0, tout=0;
+    const by={};
+    allKeys.forEach(k=>{ by[k]=0; });
+    fltRecs.forEach(r=>{
+      const a=Number(r.amt);
+      const cat=catMap[r.cat];
+      if(!(r.cat in by)) by[r.cat]=0;
+      if(!cat){
+        if(a>=0) tin+=a; else tout+=Math.abs(a);
+        by[r.cat]+=a; return;
+      }
+      if(cat.signed){
+        if(a>=0){ tin+=a; by[r.cat]+=a; }
+        else { tout+=Math.abs(a); by[r.cat]+=a; }
+      } else if(cat.sign===1){
+        tin+=a; by[r.cat]+=a;
+      } else {
+        tout+=Math.abs(a); by[r.cat]+=Math.abs(a);
+      }
+    });
+    return {...by, totalIn:Math.round(tin), totalOut:Math.round(tout), net:Math.round(tin-tout)};
+  },[fltRecs, catMap, allKeys]);
+
   // Login
   function doLogin() {
     const name=nameInput.trim();
@@ -223,14 +261,6 @@ export default function App() {
   const allYMs = useMemo(()=>{ const s=new Set(recs.map(r=>r.date.slice(0,7))); s.add(nowYM()); return [...s].sort().reverse(); },[recs]);
   const datFlt = useMemo(()=>{ if(rMode==="month")return recs.filter(r=>r.date.slice(0,7)===ym); return recs.filter(r=>r.date>=range.from&&r.date<=range.to); },[recs,rMode,ym,range]);
   const fltRecs= useMemo(()=> datFlt.filter(r=>checked.has(r.cat)),[datFlt,checked]);
-
-  const sum = useMemo(()=>{
-    let tin=0,tout=0; const by=Object.fromEntries(allKeys.map(k=>[k,0]));
-    fltRecs.forEach(r=>{ const a=Number(r.amt),cat=catMap[r.cat]; if(!cat)return;
-      if(cat.signed){ if(a>=0){tin+=a;by[r.cat]+=a;}else{tout+=Math.abs(a);by[r.cat]+=a;} }
-      else if(cat.sign===1){tin+=a;by[r.cat]+=a;} else{tout+=a;by[r.cat]+=a;} });
-    return {...by,totalIn:tin,totalOut:tout,net:tin-tout};
-  },[fltRecs,catMap,allKeys]);
 
   const trend = useMemo(()=>[...allYMs].reverse().slice(-6).map(m=>{
     const r=recs.filter(x=>x.date.slice(0,7)===m&&checked.has(x.cat));
