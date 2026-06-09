@@ -273,7 +273,25 @@ export default function App() {
     return {m:`${parseInt(m.split("-")[1])}月`,inn:Math.round(inn),out:Math.round(out),net:Math.round(inn-out)};
   }),[recs,allYMs,checked,catMap]);
 
-  const pie = useMemo(()=> [...checked].map(k=>{ const c=catMap[k]; if(!c)return null; const v=Math.round(Math.abs(sum[k]||0)); return {name:c.label,val:v,color:c.color}; }).filter(Boolean).filter(d=>d.val>0),[sum,checked,catMap]);
+  // 圓餅圖：收入類別用綠色系，支出類別用原色，signed類別分拆成獲利/虧損兩格
+  const pie = useMemo(()=>{
+    const result=[];
+    [...checked].forEach(k=>{
+      const c=catMap[k]; if(!c) return;
+      const raw=sum[k]||0;
+      if(c.signed){
+        // 分拆：獲利部分 & 虧損部分
+        const earn=fltRecs.filter(r=>r.cat===k&&Number(r.amt)>=0).reduce((a,r)=>a+Number(r.amt),0);
+        const loss=fltRecs.filter(r=>r.cat===k&&Number(r.amt)<0).reduce((a,r)=>a+Math.abs(Number(r.amt)),0);
+        if(earn>0) result.push({name:`${c.label}獲利`,val:Math.round(earn),color:c.color});
+        if(loss>0) result.push({name:`${c.label}虧損`,val:Math.round(loss),color:"#f87171"});
+      } else {
+        const val=Math.round(Math.abs(raw));
+        if(val>0) result.push({name:c.label,val,color:c.color});
+      }
+    });
+    return result;
+  },[sum,checked,catMap,fltRecs]);
 
   async function addRec(){
     const n=parseFloat(form.rawAmt);
@@ -618,25 +636,28 @@ export default function App() {
             }
           </div>
           <div className="gc">
-            <div style={{fontSize:14,fontWeight:700,color:"#f1f5f9",marginBottom:14}}>類別結構</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#f1f5f9",marginBottom:4}}>類別結構</div>
+            <div style={{fontSize:11,color:"#1e3a5f",marginBottom:14}}>投資類別會分拆獲利／虧損</div>
             {pie.length===0?<div style={{textAlign:"center",color:"#1e3a5f",padding:"40px 0"}}>此期間無資料</div>:
-              <ResponsiveContainer width="100%" height={240}><PieChart>
-                <Pie data={pie} cx="50%" cy="50%" outerRadius={88} innerRadius={40} dataKey="val" paddingAngle={4}
-                  label={({name,percent,x,y,cx:cx2})=>(
-                    <text x={x} y={y} textAnchor={x>cx2?"start":"end"} dominantBaseline="central" fill="#94a3b8" fontSize={11} fontFamily="Noto Sans TC">
-                      {name} {(percent*100).toFixed(0)}%
-                    </text>
-                  )}
-                  labelLine={{stroke:"#334155",strokeWidth:1}}>
-                  {pie.map((d,i)=><Cell key={i} fill={d.color}/>)}
-                </Pie>
-                <Tooltip
-                  contentStyle={{background:"rgba(10,15,26,.95)",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,fontSize:13,color:"#e2e8f0",padding:"10px 16px"}}
-                  itemStyle={{color:"#e2e8f0"}}
-                  labelStyle={{color:"#64748b",marginBottom:4}}
-                  formatter={(v,name)=>[`${v.toLocaleString()} 元`, name]}
-                />
-              </PieChart></ResponsiveContainer>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart margin={{top:10,right:10,bottom:10,left:10}}>
+                  <Pie data={pie} cx="50%" cy="50%" outerRadius={85} innerRadius={38} dataKey="val" paddingAngle={3}
+                    label={({name,percent,x,y,cx:cx2})=>(
+                      <text x={x} y={y} textAnchor={x>cx2?"start":"end"} dominantBaseline="central" fill="#64748b" fontSize={10} fontFamily="Noto Sans TC">
+                        {name} {(percent*100).toFixed(0)}%
+                      </text>
+                    )}
+                    labelLine={{stroke:"#1e3a5f",strokeWidth:1}}>
+                    {pie.map((d,i)=><Cell key={i} fill={d.color}/>)}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{background:"rgba(10,15,26,.97)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,fontSize:13,color:"#e2e8f0",padding:"10px 16px"}}
+                    itemStyle={{color:"#e2e8f0"}}
+                    labelStyle={{display:"none"}}
+                    formatter={(v,name)=>[`${v.toLocaleString()} 元`, name]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             }
           </div>
           <div className="gc">
