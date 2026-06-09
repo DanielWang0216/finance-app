@@ -4,14 +4,22 @@ import * as XLSX from "xlsx";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyNb_zx1ZnASY78XPNAF8RTMMgSjoe8GG9yJJ_SMsNVigiUmzLrwAL4tNyu1iBXOj1TEg/exec";
 
-// ── 預設類別 ──
+// ── 類別 sign 說明 ──
+// sign: 1  = 資產增加（收入）
+// sign: -1 = 資產減少（支出）
+// signed: false = 單向輸入（只輸正數）
+// signed: true  = 已廢棄，不再使用
+
 const DEFAULT_CATS = [
-  { key:"income",   label:"薪資收入", icon:"💼", color:"#4ade80", sign: 1, signed:false, desc:"薪水、兼職、獎金" },
-  { key:"invest",   label:"股票/ETF", icon:"📊", color:"#38bdf8", sign: 0, signed:true,  desc:"+獲利/入金  −虧損/出金" },
-  { key:"living",   label:"生活費用", icon:"🛒", color:"#fb923c", sign:-1, signed:false, desc:"餐飲、購物、交通" },
-  { key:"learning", label:"學習花費", icon:"📚", color:"#a78bfa", sign:-1, signed:false, desc:"課程、書籍、工具" },
-  { key:"loan",     label:"貸款",     icon:"🏦", color:"#fbbf24", sign:-1, signed:false, desc:"房貸、車貸、分期" },
-  { key:"card",     label:"信用卡費", icon:"💳", color:"#f472b6", sign:-1, signed:false, desc:"信用卡帳單" },
+  { key:"income",      label:"薪資收入", icon:"💼", color:"#4ade80", sign: 1,  signed:false, desc:"薪水、兼職、獎金" },
+  { key:"stock_earn",  label:"股票獲利", icon:"📈", color:"#34d399", sign: 1,  signed:false, desc:"賣股賺錢、股息" },
+  { key:"stock_out",   label:"股票出金", icon:"💵", color:"#38bdf8", sign: 1,  signed:false, desc:"從股票帳戶領回現金" },
+  { key:"stock_loss",  label:"股票虧損", icon:"📉", color:"#f87171", sign:-1,  signed:false, desc:"賣股賠錢" },
+  { key:"stock_in",    label:"股票入金", icon:"🏧", color:"#94a3b8", sign:-1,  signed:false, desc:"把現金轉入股票帳戶" },
+  { key:"living",      label:"生活費用", icon:"🛒", color:"#fb923c", sign:-1,  signed:false, desc:"餐飲、購物、交通" },
+  { key:"learning",    label:"學習花費", icon:"📚", color:"#a78bfa", sign:-1,  signed:false, desc:"課程、書籍、工具" },
+  { key:"loan",        label:"貸款",     icon:"🏦", color:"#fbbf24", sign:-1,  signed:false, desc:"房貸、車貸、分期" },
+  { key:"card",        label:"信用卡費", icon:"💳", color:"#f472b6", sign:-1,  signed:false, desc:"信用卡帳單" },
 ];
 
 const PALETTE = ["#4ade80","#38bdf8","#fb923c","#a78bfa","#fbbf24","#f472b6","#f87171","#34d399","#818cf8","#e879f9","#facc15","#60a5fa","#2dd4bf","#c084fc"];
@@ -245,21 +253,13 @@ export default function App() {
     const by={};
     allKeys.forEach(k=>{ by[k]=0; });
     fltRecs.forEach(r=>{
-      const a=Number(r.amt);
+      const a=Math.abs(Number(r.amt));
       const cat=catMap[r.cat];
       if(!(r.cat in by)) by[r.cat]=0;
-      if(!cat){
-        if(a>=0) tin+=a; else tout+=Math.abs(a);
-        by[r.cat]+=a; return;
-      }
-      if(cat.signed){
-        if(a>=0){ tin+=a; by[r.cat]+=a; }
-        else { tout+=Math.abs(a); by[r.cat]+=a; }
-      } else if(cat.sign===1){
-        tin+=a; by[r.cat]+=a;
-      } else {
-        tout+=Math.abs(a); by[r.cat]+=Math.abs(a);
-      }
+      by[r.cat]+=a;
+      if(!cat){ tin+=a; return; } // 未知類別當收入
+      if(cat.sign===1) tin+=a;
+      else tout+=a;
     });
     return {...by, totalIn:Math.round(tin), totalOut:Math.round(tout), net:Math.round(tin-tout)};
   },[fltRecs, catMap, allKeys]);
@@ -267,38 +267,28 @@ export default function App() {
   const trend = useMemo(()=>[...allYMs].reverse().slice(-6).map(m=>{
     const r=recs.filter(x=>x.date.slice(0,7)===m&&checked.has(x.cat));
     let inn=0,out=0;
-    r.forEach(x=>{ const a=Number(x.amt),cat=catMap[x.cat]; if(!cat)return;
-      if(cat.signed){if(a>=0)inn+=a;else out+=Math.abs(a);}
-      else if(cat.sign===1)inn+=a; else out+=a; });
+    r.forEach(x=>{
+      const a=Math.abs(Number(x.amt));
+      const cat=catMap[x.cat];
+      if(!cat||cat.sign===1) inn+=a; else out+=a;
+    });
     return {m:`${parseInt(m.split("-")[1])}月`,inn:Math.round(inn),out:Math.round(out),net:Math.round(inn-out)};
   }),[recs,allYMs,checked,catMap]);
 
-  // 圓餅圖：收入類別用綠色系，支出類別用原色，signed類別分拆成獲利/虧損兩格
   const pie = useMemo(()=>{
-    const result=[];
-    [...checked].forEach(k=>{
-      const c=catMap[k]; if(!c) return;
-      const raw=sum[k]||0;
-      if(c.signed){
-        // 分拆：獲利部分 & 虧損部分
-        const earn=fltRecs.filter(r=>r.cat===k&&Number(r.amt)>=0).reduce((a,r)=>a+Number(r.amt),0);
-        const loss=fltRecs.filter(r=>r.cat===k&&Number(r.amt)<0).reduce((a,r)=>a+Math.abs(Number(r.amt)),0);
-        if(earn>0) result.push({name:`${c.label}獲利`,val:Math.round(earn),color:c.color});
-        if(loss>0) result.push({name:`${c.label}虧損`,val:Math.round(loss),color:"#f87171"});
-      } else {
-        const val=Math.round(Math.abs(raw));
-        if(val>0) result.push({name:c.label,val,color:c.color});
-      }
-    });
-    return result;
-  },[sum,checked,catMap,fltRecs]);
+    return [...checked].map(k=>{
+      const c=catMap[k]; if(!c) return null;
+      const val=Math.round(sum[k]||0);
+      if(val<=0) return null;
+      return {name:c.label, val, color:c.color};
+    }).filter(Boolean);
+  },[sum,checked,catMap]);
 
   async function addRec(){
     const n=parseFloat(form.rawAmt);
     if(!form.rawAmt||isNaN(n)||n<=0){showToast("⚠️ 請輸入正確金額","warn");return;}
     const cat=catMap[form.cat]; if(!cat)return;
-    const amt=cat.signed?n*sSign:n;
-    const r={id:Date.now(),date:form.date,cat:form.cat,amt,note:form.note.trim()};
+    const r={id:Date.now(),date:form.date,cat:form.cat,amt:n,note:form.note.trim()};
     const upd=[r,...recs].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     setRecs(upd); setForm(f=>({...f,rawAmt:"",note:""}));
     showToast(`✅ 已新增：${cat.label}`);
@@ -322,9 +312,8 @@ export default function App() {
   async function saveEdit(){
     const n=parseFloat(editForm.rawAmt);
     if(!editForm.rawAmt||isNaN(n)||n<=0){showToast("⚠️ 請輸入正確金額","warn");return;}
-    const cat=catMap[editForm.cat]; if(!cat)return;
-    const amt=cat.signed?n*editSSign:n;
-    const upd=recs.map(r=>r.id===editRec.id?{...r,date:editForm.date,cat:editForm.cat,amt,note:editForm.note.trim()}:r).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    const upd=recs.map(r=>r.id===editRec.id?{...r,date:editForm.date,cat:editForm.cat,amt:n,note:editForm.note.trim()}:r)
+      .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     setRecs(upd); setEditRec(null); showToast("✏️ 已儲存修改");
     setSyncing(true); const ok=await pushCloud(user,upd); setSyncing(false);
     if(ok){setSyncOk(true);setLastSync(new Date().toISOString());}
@@ -518,18 +507,13 @@ export default function App() {
                 </div>
               </div>
               {curCat?.signed&&(
-                <div>
-                  <div style={{fontSize:10,color:"#334155",letterSpacing:".12em",marginBottom:8,fontWeight:700}}>📌 方向</div>
-                  <div className="sign-toggle">
-                    <button className="sign-btn" style={sSign===1?{background:"linear-gradient(135deg,#0c4a6e,#14532d)",color:"#4ade80"}:{color:"#334155"}} onClick={()=>setSSign(1)}><span style={{fontSize:18}}>📈</span><div style={{textAlign:"left"}}><div style={{fontSize:13}}>獲利 / 入金</div><div style={{fontSize:10,opacity:.6}}>賺錢、存入</div></div></button>
-                    <div style={{width:1,background:"rgba(255,255,255,.06)"}}/>
-                    <button className="sign-btn" style={sSign===-1?{background:"linear-gradient(135deg,#7c1d1d,#1c1917)",color:"#f87171"}:{color:"#334155"}} onClick={()=>setSSign(-1)}><span style={{fontSize:18}}>📉</span><div style={{textAlign:"left"}}><div style={{fontSize:13}}>虧損 / 出金</div><div style={{fontSize:10,opacity:.6}}>賠錢、取出</div></div></button>
-                  </div>
+                <div style={{background:"rgba(56,189,248,.08)",border:"1px solid rgba(56,189,248,.15)",borderRadius:12,padding:"10px 14px",fontSize:12,color:"#38bdf8"}}>
+                  ℹ️ 此類別已移除，請使用新的股票類別
                 </div>
               )}
               <div>
                 <div style={{fontSize:10,color:"#334155",letterSpacing:".12em",marginBottom:8,fontWeight:700}}>
-                  💵 金額（元）{curCat?.signed&&<span style={{marginLeft:8,fontSize:10,color:sSign===1?"#4ade80":"#f87171",fontWeight:700}}>{sSign===1?"＋":"－"}</span>}
+                  💵 金額（元）
                 </div>
                 <div style={{position:"relative"}}>
                   {curCat?.signed&&<div style={{position:"absolute",left:15,top:"50%",transform:"translateY(-50%)",fontSize:22,fontWeight:700,color:sSign===1?"#4ade80":"#f87171",fontFamily:"'DM Mono',monospace",pointerEvents:"none",zIndex:1}}>{sSign===1?"+":"−"}</div>}
@@ -541,18 +525,18 @@ export default function App() {
               <div><div style={{fontSize:10,color:"#334155",letterSpacing:".12em",marginBottom:8,fontWeight:700}}>📝 備註（選填）</div><input className="fi" placeholder="備註..." value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")addRec()}}/></div>
               <button className="btn-primary" onClick={addRec} disabled={syncing}
                 style={{background:curCat?`linear-gradient(135deg,${curCat.color}cc,${curCat.color}88)`:"linear-gradient(135deg,#4ade80,#38bdf8)",color:"#fff",boxShadow:`0 4px 20px ${curCat?.color||"#4ade80"}22`,marginTop:4}}>
-                {syncing?"同步中...":curCat?.signed?(sSign===1?`＋ 新增 ${curCat.label} 獲利/入金`:`－ 新增 ${curCat.label} 虧損/出金`):`＋ 新增${curCat?.label}`}
+                {syncing?"同步中...":`＋ 新增${curCat?.label||""}`}
               </button>
             </div>
           </div>
           {recs.slice(0,5).length>0&&(
             <div className="gc">
               <div style={{fontSize:11,color:"#1e3a5f",letterSpacing:".1em",fontWeight:700,marginBottom:14}}>最近記錄</div>
-              {recs.slice(0,5).map(r=>{ const c=catMap[r.cat]; const a=Number(r.amt); const isIn=c?.sign===1||(c?.signed&&a>=0); return (
+              {recs.slice(0,5).map(r=>{ const c=catMap[r.cat]; const a=Number(r.amt); const isIn=c?.sign===1; return (
                 <div key={r.id} className="rr">
                   <div style={{width:40,height:40,background:(c?.color||"#666")+"15",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,flexShrink:0}}>{c?.icon||"?"}</div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,color:"#cbd5e1",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c?.signed?(a>=0?"📈 獲利/入金":"📉 虧損/出金"):c?.label||r.cat}{r.note?` · ${r.note}`:""}</div>
+                    <div style={{fontSize:13,fontWeight:500,color:"#cbd5e1",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c?.label||r.cat}{r.note?` · ${r.note}`:""}</div>
                     <div style={{fontSize:11,color:"#1e3a5f",marginTop:3}}>{r.date}</div>
                   </div>
                   <span className="mono" style={{fontSize:15,fontWeight:600,color:isIn?"#4ade80":"#f87171",flexShrink:0}}>{isIn?"+":"-"}{fmtN(Math.abs(a))}</span>
@@ -683,12 +667,12 @@ export default function App() {
             </div>
             <div style={{marginBottom:14}}><FilterBar/></div>
             {fltRecs.length===0&&<div style={{textAlign:"center",padding:"48px 0"}}><div style={{fontSize:36,marginBottom:10}}>📭</div><div style={{color:"#334155"}}>此類別無記錄</div></div>}
-            {fltRecs.map(r=>{ const c=catMap[r.cat]; const a=Number(r.amt); const isIn=c?.sign===1||(c?.signed&&a>=0); return (
+            {fltRecs.map(r=>{ const c=catMap[r.cat]; const a=Number(r.amt); const isIn=c?.sign===1; return (
               <div key={r.id} className="rr" style={{cursor:"pointer"}} onClick={()=>openEdit(r)}>
                 <div style={{width:40,height:40,background:(c?.color||"#666")+"15",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,flexShrink:0}}>{c?.icon||"?"}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                    <span className="chip" style={{background:(c?.color||"#666")+"20",color:c?.color||"#666"}}>{c?.signed?(a>=0?"📈 獲利":"📉 虧損"):c?.label||r.cat}</span>
+                    <span className="chip" style={{background:(c?.color||"#666")+"20",color:c?.color||"#666"}}>{c?.label||r.cat}</span>
                     {r.note&&<span style={{fontSize:11,color:"#334155",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{r.note}</span>}
                   </div>
                   <div style={{fontSize:11,color:"#1e293b",marginTop:4,fontWeight:600}}>{r.date}</div>
@@ -757,13 +741,8 @@ export default function App() {
                 </div>
               </div>
               {catMap[editForm.cat]?.signed&&(
-                <div>
-                  <div style={{fontSize:10,color:"#334155",letterSpacing:".12em",marginBottom:7,fontWeight:700}}>📌 方向</div>
-                  <div className="sign-toggle">
-                    <button className="sign-btn" style={editSSign===1?{background:"linear-gradient(135deg,#0c4a6e,#14532d)",color:"#4ade80"}:{color:"#334155"}} onClick={()=>setEditSSign(1)}><span>📈</span><span style={{fontSize:13}}>獲利/入金</span></button>
-                    <div style={{width:1,background:"rgba(255,255,255,.06)"}}/>
-                    <button className="sign-btn" style={editSSign===-1?{background:"linear-gradient(135deg,#7c1d1d,#1c1917)",color:"#f87171"}:{color:"#334155"}} onClick={()=>setEditSSign(-1)}><span>📉</span><span style={{fontSize:13}}>虧損/出金</span></button>
-                  </div>
+                <div style={{background:"rgba(56,189,248,.08)",border:"1px solid rgba(56,189,248,.15)",borderRadius:12,padding:"10px 14px",fontSize:12,color:"#38bdf8"}}>
+                  ℹ️ 舊格式資料，建議重新以新類別記錄
                 </div>
               )}
               <div>
